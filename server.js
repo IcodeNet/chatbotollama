@@ -275,10 +275,23 @@ app.listen(port, async () => {
     const count = await vectorCollection.count();
     if (count === 0) {
       log.info("Loading initial documentation...");
-      // Load and chunk documentation
-      const documentation = fs.readFileSync("context/flagstone.md", "utf8");
-      await addDocumentsToVectorStore(vectorCollection, [documentation]);
-      log.success("Initial documentation loaded");
+
+      // Read all .md files from context directory
+      const files = fs.readdirSync("context");
+      const documents = files
+        .filter((file) => file.endsWith(".md"))
+        .map((file) => {
+          const content = fs.readFileSync(`context/${file}`, "utf8");
+          log.info(`Loading ${file}...`);
+          return content;
+        });
+
+      if (documents.length === 0) {
+        log.warn("No markdown files found in context directory");
+      } else {
+        await addDocumentsToVectorStore(vectorCollection, documents);
+        log.success(`Loaded ${documents.length} documentation files`);
+      }
     } else {
       log.success(`Using existing collection with ${count} entries`);
     }
