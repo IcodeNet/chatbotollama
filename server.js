@@ -39,22 +39,14 @@ const initializeVectorStore = async () => {
     await chroma.heartbeat();
     log.success("ChromaDB connection successful");
 
-    let collection;
+    // Try to get existing collection or create new one
+    const collection = await chroma.getOrCreateCollection({
+      name: "flagstone_docs",
+      metadata: { description: "Flagstone documentation embeddings" },
+    });
 
-    // Try to get existing collection
-    try {
-      collection = await chroma.getCollection("flagstone_docs");
-      log.success("Using existing collection");
-      return collection;
-    } catch (e) {
-      // Collection doesn't exist, create new one
-      collection = await chroma.createCollection({
-        name: "flagstone_docs",
-        metadata: { description: "Flagstone documentation embeddings" },
-      });
-      log.success("Created new vector store collection");
-      return collection;
-    }
+    log.success("Vector store collection ready");
+    return collection;
   } catch (error) {
     log.error("Failed to initialize vector store:", error);
     throw error;
@@ -279,13 +271,22 @@ app.listen(port, async () => {
     // Initialize vector store
     vectorCollection = await initializeVectorStore();
 
-    // Load and chunk documentation
-    const documentation = fs.readFileSync("context/flagstone.md", "utf8");
-    await addDocumentsToVectorStore(vectorCollection, [documentation]);
+    // Only load documentation if the collection is empty
+    const count = await vectorCollection.count();
+    if (count === 0) {
+      log.info("Loading initial documentation...");
+      // Load and chunk documentation
+      const documentation = fs.readFileSync("context/flagstone.md", "utf8");
+      await addDocumentsToVectorStore(vectorCollection, [documentation]);
+      log.success("Initial documentation loaded");
+    } else {
+      log.success(`Using existing collection with ${count} entries`);
+    }
 
     log.success("RAG system initialized successfully");
   } catch (error) {
     log.error("Failed to initialize RAG system:", error);
+    process.exit(1); // Exit if we can't initialize the RAG system
   }
 });
 
@@ -373,23 +374,3 @@ app.post("/api/docs", async (req, res) => {
     });
   }
 });
-
-// Update the RAG system initialization
-const initializeRAGSystem = async () => {
-  try {
-    vectorCollection = await initializeVectorStore();
-    log.success("RAG system initialized");
-
-    // Load initial documents if collection is empty
-    const count = await vectorCollection.count();
-    if (count === 0) {
-      log.info("Collection is empty, loading initial documents...");
-      await loadDocumentsIntoVectorStore();
-    } else {
-      log.info(`Collection contains ${count} documents`);
-    }
-  } catch (error) {
-    log.error("Failed to initialize RAG system:", error);
-    throw error;
-  }
-};
